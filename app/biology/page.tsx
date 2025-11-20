@@ -1,12 +1,12 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
-import { ArrowLeft, Dna, Search, BarChart3, Zap, Copy, RotateCcw } from "lucide-react"
+import { ArrowLeft, Dna, Search, BarChart3, Zap, Copy, RotateCcw, CheckCircle2 } from "lucide-react"
 import Link from "next/link"
 
 const FloatingDNA = ({ delay = 0 }) => (
@@ -107,85 +107,95 @@ const DNAAnalyzer = () => {
   const [analysis, setAnalysis] = useState(null)
   const [complement, setComplement] = useState("")
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [copied, setCopied] = useState(null)
 
-  // Update the analyzeDNA function to be more robust
-  const analyzeDNA = () => {
-    setIsAnalyzing(true)
+  const analyzeDNA = useMemo(() => {
+    return () => {
+      setIsAnalyzing(true)
 
-    setTimeout(() => {
-      try {
-        const sequence = dnaSequence.toUpperCase().replace(/[^ATCG]/g, "")
+      setTimeout(() => {
+        try {
+          const sequence = dnaSequence.toUpperCase().replace(/[^ATCG]/g, "")
 
-        if (sequence.length === 0) {
+          if (sequence.length === 0) {
+            setAnalysis(null)
+            setComplement("")
+            setIsAnalyzing(false)
+            return
+          }
+
+          // Count nucleotides
+          const counts = { A: 0, T: 0, G: 0, C: 0 }
+          for (const nucleotide of sequence) {
+            if (counts.hasOwnProperty(nucleotide)) {
+              counts[nucleotide]++
+            }
+          }
+
+          const total = Object.values(counts).reduce((sum, count) => sum + count, 0)
+          const percentages = {}
+          Object.entries(counts).forEach(([nucleotide, count]) => {
+            percentages[nucleotide] = total > 0 ? (count / total) * 100 : 0
+          })
+
+          // Generate complement
+          const complementMap = { A: "T", T: "A", G: "C", C: "G" }
+          const complementSeq = sequence
+            .split("")
+            .map((n) => complementMap[n] || n)
+            .join("")
+
+          // Calculate GC content
+          const gcContent = percentages.G + percentages.C
+
+          // Find patterns (optimized)
+          const patterns = findPatterns(sequence)
+
+          setAnalysis({
+            sequence,
+            length: sequence.length,
+            counts,
+            percentages,
+            gcContent,
+            patterns,
+          })
+          setComplement(complementSeq)
+        } catch (error) {
+          console.error("Error analyzing DNA:", error)
           setAnalysis(null)
           setComplement("")
+        } finally {
           setIsAnalyzing(false)
-          return
         }
+      }, 300)
+    }
+  }, [dnaSequence])
 
-        // Count nucleotides
-        const counts = { A: 0, T: 0, G: 0, C: 0 }
-        for (const nucleotide of sequence) {
-          if (counts.hasOwnProperty(nucleotide)) {
-            counts[nucleotide]++
-          }
-        }
-
-        const total = Object.values(counts).reduce((sum, count) => sum + count, 0)
-        const percentages = {}
-        Object.entries(counts).forEach(([nucleotide, count]) => {
-          percentages[nucleotide] = total > 0 ? (count / total) * 100 : 0
-        })
-
-        // Generate complement
-        const complementMap = { A: "T", T: "A", G: "C", C: "G" }
-        const complementSeq = sequence
-          .split("")
-          .map((n) => complementMap[n] || n)
-          .join("")
-
-        // Calculate GC content
-        const gcContent = percentages.G + percentages.C
-
-        // Find patterns
-        const patterns = findPatterns(sequence)
-
-        setAnalysis({
-          sequence,
-          length: sequence.length,
-          counts,
-          percentages,
-          gcContent,
-          patterns,
-        })
-        setComplement(complementSeq)
-      } catch (error) {
-        console.error("Error analyzing DNA:", error)
-        setAnalysis(null)
-        setComplement("")
-      } finally {
-        setIsAnalyzing(false)
-      }
-    }, 800)
-  }
-
-  // Update the findPatterns function to be more efficient
   const findPatterns = (sequence) => {
     const patterns = []
     const foundPatterns = new Set()
+    const maxPatternLength = Math.min(8, Math.floor(sequence.length / 2))
 
     // Find repeating sequences
-    for (let length = 2; length <= Math.min(6, Math.floor(sequence.length / 2)); length++) {
+    for (let length = 2; length <= maxPatternLength; length++) {
       for (let i = 0; i <= sequence.length - length * 2; i++) {
         const pattern = sequence.substring(i, i + length)
         const patternKey = `${pattern}-${length}`
 
         if (!foundPatterns.has(patternKey)) {
-          const nextOccurrence = sequence.indexOf(pattern, i + length)
-          if (nextOccurrence !== -1) {
+          const occurrences = []
+          let index = sequence.indexOf(pattern)
+
+          while (index !== -1 && occurrences.length < 5) {
+            occurrences.push(index)
+            index = sequence.indexOf(pattern, index + 1)
+          }
+
+          if (occurrences.length >= 2) {
             patterns.push({
               pattern,
-              positions: [i, nextOccurrence],
+              positions: occurrences.slice(0, 3), // Show max 3 positions
+              count: occurrences.length,
               length,
             })
             foundPatterns.add(patternKey)
@@ -194,7 +204,8 @@ const DNAAnalyzer = () => {
       }
     }
 
-    return patterns.slice(0, 5) // Return first 5 unique patterns
+    // Sort by count (most frequent first) and return top 5
+    return patterns.sort((a, b) => b.count - a.count).slice(0, 5)
   }
 
   const generateRandomDNA = (length = 50) => {
@@ -206,29 +217,32 @@ const DNAAnalyzer = () => {
     setDnaSequence(sequence)
   }
 
-  // Fix the copyToClipboard function
-  const copyToClipboard = async (text) => {
+  const copyToClipboard = async (text, type) => {
     try {
       await navigator.clipboard.writeText(text)
-      // You could add a toast notification here
+      setCopied(type)
+      setTimeout(() => setCopied(null), 2000)
     } catch (err) {
       console.error("Failed to copy text: ", err)
       // Fallback for older browsers
       const textArea = document.createElement("textarea")
       textArea.value = text
+      textArea.style.position = "fixed"
+      textArea.style.opacity = "0"
       document.body.appendChild(textArea)
       textArea.focus()
       textArea.select()
       try {
         document.execCommand("copy")
+        setCopied(type)
+        setTimeout(() => setCopied(null), 2000)
       } catch (err) {
-        console.error("Fallback: Oops, unable to copy", err)
+        console.error("Fallback: Unable to copy", err)
       }
       document.body.removeChild(textArea)
     }
   }
 
-  // Update the useEffect to trigger analysis on sequence change
   useEffect(() => {
     if (dnaSequence && dnaSequence.trim().length > 0) {
       const timeoutId = setTimeout(() => {
@@ -240,7 +254,7 @@ const DNAAnalyzer = () => {
       setAnalysis(null)
       setComplement("")
     }
-  }, [dnaSequence])
+  }, [dnaSequence, analyzeDNA])
 
   const sampleSequences = [
     {
@@ -261,17 +275,12 @@ const DNAAnalyzer = () => {
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-emerald-900 to-cyan-900 relative overflow-hidden">
       {/* Biology-themed floating background */}
       <div className="absolute inset-0">
-        {/* Floating DNA */}
         {[...Array(8)].map((_, i) => (
           <FloatingDNA key={`dna-${i}`} delay={i * 0.7} />
         ))}
-
-        {/* Floating Cells */}
         {[...Array(12)].map((_, i) => (
           <FloatingCell key={`cell-${i}`} delay={i * 0.5} />
         ))}
-
-        {/* Floating Helix */}
         {[...Array(6)].map((_, i) => (
           <FloatingHelix key={`helix-${i}`} delay={i * 1.2} />
         ))}
@@ -326,7 +335,14 @@ const DNAAnalyzer = () => {
                     disabled={isAnalyzing}
                     className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white"
                   >
-                    {isAnalyzing ? "Analyzing..." : "Analyze DNA"}
+                    {isAnalyzing ? (
+                      <>
+                        <div className="w-4 h-4 mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Analyzing...
+                      </>
+                    ) : (
+                      "Analyze DNA"
+                    )}
                   </Button>
                   <Button
                     onClick={() => generateRandomDNA()}
@@ -383,15 +399,14 @@ const DNAAnalyzer = () => {
                       {Object.entries(analysis.counts).map(([nucleotide, count]) => (
                         <div key={nucleotide} className="text-center">
                           <div
-                            className={`w-16 h-16 mx-auto rounded-full flex items-center justify-center text-white font-bold text-xl mb-2 ${
-                              nucleotide === "A"
+                            className={`w-16 h-16 mx-auto rounded-full flex items-center justify-center text-white font-bold text-xl mb-2 ${nucleotide === "A"
                                 ? "bg-red-500"
                                 : nucleotide === "T"
                                   ? "bg-blue-500"
                                   : nucleotide === "C"
                                     ? "bg-green-500"
                                     : "bg-yellow-500"
-                            }`}
+                              }`}
                           >
                             {nucleotide}
                           </div>
@@ -431,10 +446,14 @@ const DNAAnalyzer = () => {
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => copyToClipboard(analysis.sequence)}
+                            onClick={() => copyToClipboard(analysis.sequence, 'original')}
                             className="text-white hover:bg-white/10"
                           >
-                            <Copy className="w-4 h-4" />
+                            {copied === 'original' ? (
+                              <CheckCircle2 className="w-4 h-4 text-green-400" />
+                            ) : (
+                              <Copy className="w-4 h-4" />
+                            )}
                           </Button>
                         </div>
                         <div className="bg-gray-800/50 p-3 rounded-lg font-mono text-sm text-white break-all">
@@ -448,10 +467,14 @@ const DNAAnalyzer = () => {
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => copyToClipboard(complement)}
+                            onClick={() => copyToClipboard(complement, 'complement')}
                             className="text-white hover:bg-white/10"
                           >
-                            <Copy className="w-4 h-4" />
+                            {copied === 'complement' ? (
+                              <CheckCircle2 className="w-4 h-4 text-green-400" />
+                            ) : (
+                              <Copy className="w-4 h-4" />
+                            )}
                           </Button>
                         </div>
                         <div className="bg-gray-800/50 p-3 rounded-lg font-mono text-sm text-cyan-300 break-all">
@@ -473,9 +496,14 @@ const DNAAnalyzer = () => {
                           <div key={index} className="flex items-center justify-between p-3 bg-gray-800/30 rounded-lg">
                             <div>
                               <span className="text-white font-mono">{pattern.pattern}</span>
-                              <span className="text-gray-400 text-sm ml-2">(Length: {pattern.length})</span>
+                              <span className="text-gray-400 text-sm ml-2">
+                                (Length: {pattern.length}, Found: {pattern.count}x)
+                              </span>
                             </div>
-                            <div className="text-emerald-400 text-sm">Positions: {pattern.positions.join(", ")}</div>
+                            <div className="text-emerald-400 text-sm">
+                              Positions: {pattern.positions.join(", ")}
+                              {pattern.count > pattern.positions.length && "..."}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -483,6 +511,18 @@ const DNAAnalyzer = () => {
                   </Card>
                 )}
               </>
+            )}
+
+            {!analysis && (
+              <Card className="bg-gray-900/50 border-white/10 backdrop-blur-xl">
+                <CardContent className="py-20">
+                  <div className="text-center text-gray-400">
+                    <Dna className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                    <p className="text-lg">Enter a DNA sequence to begin analysis</p>
+                    <p className="text-sm mt-2">Use A, T, C, G nucleotides</p>
+                  </div>
+                </CardContent>
+              </Card>
             )}
           </div>
         </div>

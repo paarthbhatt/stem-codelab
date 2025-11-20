@@ -5,7 +5,7 @@ import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Beaker, Atom, Zap, Plus, RotateCcw } from "lucide-react"
+import { ArrowLeft, Beaker, Atom, Zap, Plus, RotateCcw, Trash2 } from "lucide-react"
 import Link from "next/link"
 
 const FloatingAtom = ({ delay = 0 }) => (
@@ -88,6 +88,7 @@ const MolecularBuilder = () => {
   const [selectedElement, setSelectedElement] = useState("C")
   const [molecules, setMolecules] = useState([])
   const [bonds, setBonds] = useState([])
+  const [selectedAtoms, setSelectedAtoms] = useState([])
   const [formula, setFormula] = useState("")
   const [molecularWeight, setMolecularWeight] = useState(0)
 
@@ -154,6 +155,16 @@ const MolecularBuilder = () => {
     // Draw atoms
     molecules.forEach((atom, index) => {
       const element = elements[atom.element]
+      const isSelected = selectedAtoms.includes(index)
+
+      // Draw selection highlight
+      if (isSelected) {
+        ctx.strokeStyle = "#22d3ee"
+        ctx.lineWidth = 4
+        ctx.beginPath()
+        ctx.arc(atom.x, atom.y, element.radius + 5, 0, 2 * Math.PI)
+        ctx.stroke()
+      }
 
       // Draw atom circle
       ctx.fillStyle = element.color
@@ -212,16 +223,22 @@ const MolecularBuilder = () => {
     if (clickedAtomIndex === -1) {
       // Add new atom
       addAtom(x, y)
+      setSelectedAtoms([])
     } else {
-      // Could implement atom selection/deletion here
-      console.log("Clicked on atom:", molecules[clickedAtomIndex])
+      // Toggle atom selection
+      setSelectedAtoms((prev) => {
+        if (prev.includes(clickedAtomIndex)) {
+          return prev.filter((i) => i !== clickedAtomIndex)
+        } else {
+          return [...prev, clickedAtomIndex]
+        }
+      })
     }
   }
 
   const addBond = () => {
-    if (molecules.length >= 2) {
-      const atom1 = molecules.length - 2
-      const atom2 = molecules.length - 1
+    if (selectedAtoms.length === 2) {
+      const [atom1, atom2] = selectedAtoms
 
       // Check if bond already exists
       const bondExists = bonds.some(
@@ -231,12 +248,48 @@ const MolecularBuilder = () => {
       if (!bondExists) {
         setBonds((prev) => [...prev, { atom1, atom2, id: Date.now() }])
       }
+      setSelectedAtoms([])
+    }
+  }
+
+  const deleteSelected = () => {
+    if (selectedAtoms.length > 0) {
+      // Sort in descending order to avoid index shifting issues
+      const sortedIndices = [...selectedAtoms].sort((a, b) => b - a)
+
+      setMolecules((prev) => {
+        const newMolecules = [...prev]
+        sortedIndices.forEach((index) => {
+          newMolecules.splice(index, 1)
+        })
+        return newMolecules
+      })
+
+      // Remove bonds connected to deleted atoms
+      setBonds((prev) =>
+        prev.filter((bond) => !selectedAtoms.includes(bond.atom1) && !selectedAtoms.includes(bond.atom2))
+          .map((bond) => {
+            // Adjust bond indices
+            let newAtom1 = bond.atom1
+            let newAtom2 = bond.atom2
+
+            sortedIndices.forEach((deletedIndex) => {
+              if (newAtom1 > deletedIndex) newAtom1--
+              if (newAtom2 > deletedIndex) newAtom2--
+            })
+
+            return { ...bond, atom1: newAtom1, atom2: newAtom2 }
+          })
+      )
+
+      setSelectedAtoms([])
     }
   }
 
   const clearMolecule = () => {
     setMolecules([])
     setBonds([])
+    setSelectedAtoms([])
     setFormula("")
     setMolecularWeight(0)
   }
@@ -278,7 +331,7 @@ const MolecularBuilder = () => {
   useEffect(() => {
     drawMolecule()
     calculateFormula()
-  }, [molecules, bonds])
+  }, [molecules, bonds, selectedAtoms])
 
   const commonMolecules = [
     {
@@ -326,28 +379,37 @@ const MolecularBuilder = () => {
         { atom1: 0, atom2: 3 },
       ],
     },
+    {
+      name: "Carbon Dioxide",
+      formula: "CO₂",
+      atoms: [
+        { element: "C", x: 400, y: 250 },
+        { element: "O", x: 350, y: 250 },
+        { element: "O", x: 450, y: 250 },
+      ],
+      bonds: [
+        { atom1: 0, atom2: 1 },
+        { atom1: 0, atom2: 2 },
+      ],
+    },
   ]
 
   const loadMolecule = (molecule) => {
     setMolecules(molecule.atoms.map((atom, index) => ({ ...atom, id: Date.now() + index })))
     setBonds(molecule.bonds.map((bond, index) => ({ ...bond, id: Date.now() + index + 1000 })))
+    setSelectedAtoms([])
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-orange-900 to-red-900 relative overflow-hidden">
       {/* Chemistry-themed floating background */}
       <div className="absolute inset-0">
-        {/* Floating Atoms */}
         {[...Array(10)].map((_, i) => (
           <FloatingAtom key={`atom-${i}`} delay={i * 0.6} />
         ))}
-
-        {/* Floating Molecules */}
         {[...Array(8)].map((_, i) => (
           <FloatingMolecule key={`molecule-${i}`} delay={i * 0.8} />
         ))}
-
-        {/* Floating Circles */}
         {[...Array(20)].map((_, i) => {
           const sizes = ["w-3 h-3", "w-4 h-4", "w-5 h-5"]
           const colors = ["bg-yellow-400", "bg-orange-400", "bg-red-400", "bg-pink-400"]
@@ -401,11 +463,10 @@ const MolecularBuilder = () => {
                       variant={selectedElement === symbol ? "default" : "outline"}
                       size="sm"
                       onClick={() => setSelectedElement(symbol)}
-                      className={`h-12 ${
-                        selectedElement === symbol
+                      className={`h-12 ${selectedElement === symbol
                           ? "bg-orange-500 hover:bg-orange-600"
                           : "border-white/20 text-white hover:bg-white/10"
-                      }`}
+                        }`}
                       style={{ backgroundColor: selectedElement === symbol ? element.color : undefined }}
                     >
                       {symbol}
@@ -429,11 +490,20 @@ const MolecularBuilder = () => {
               <CardContent className="space-y-3">
                 <Button
                   onClick={addBond}
-                  disabled={molecules.length < 2}
-                  className="w-full bg-blue-500 hover:bg-blue-600 text-white"
+                  disabled={selectedAtoms.length !== 2}
+                  className="w-full bg-blue-500 hover:bg-blue-600 text-white disabled:opacity-50"
                 >
                   <Plus className="w-4 h-4 mr-2" />
-                  Add Bond
+                  Add Bond ({selectedAtoms.length}/2)
+                </Button>
+                <Button
+                  onClick={deleteSelected}
+                  disabled={selectedAtoms.length === 0}
+                  variant="outline"
+                  className="w-full border-red-500/50 text-red-400 hover:bg-red-500/10 disabled:opacity-50"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete Selected
                 </Button>
                 <Button
                   onClick={clearMolecule}
@@ -511,8 +581,7 @@ const MolecularBuilder = () => {
                   className="w-full h-full border border-white/10 rounded-lg bg-gradient-to-b from-orange-900/20 to-gray-900/20 cursor-crosshair"
                 />
                 <div className="mt-4 text-center text-gray-400 text-sm">
-                  Click to add {elements[selectedElement].name} atoms • Select two atoms and click "Add Bond" to connect
-                  them
+                  Click to add {elements[selectedElement].name} atoms • Click atoms to select • Select 2 atoms and click "Add Bond"
                 </div>
               </CardContent>
             </Card>

@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Slider } from "@/components/ui/slider"
 import { Badge } from "@/components/ui/badge"
-import { Play, Pause, RotateCcw, ArrowLeft, Rocket, Target, Ruler, Star, Zap } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
+import { Play, Pause, RotateCcw, ArrowLeft, Rocket, Target, Ruler, Star, Zap, Wind } from "lucide-react"
 import Link from "next/link"
 
 const FloatingRocket = ({ delay = 0 }) => (
@@ -88,6 +90,8 @@ const ProjectileSimulation = () => {
   const [velocity, setVelocity] = useState([50])
   const [angle, setAngle] = useState([45])
   const [gravity, setGravity] = useState([9.81])
+  const [airResistance, setAirResistance] = useState(false)
+  const [wind, setWind] = useState([0])
   const [trail, setTrail] = useState([])
   const [currentPos, setCurrentPos] = useState({ x: 0, y: 0 })
   const [stats, setStats] = useState({
@@ -97,22 +101,69 @@ const ProjectileSimulation = () => {
     currentTime: 0,
   })
 
+  // Simulation state refs for the animation loop
+  const simStateRef = useRef({
+    x: 0,
+    y: 0,
+    vx: 0,
+    vy: 0,
+    t: 0,
+    active: false
+  })
   const animationRef = useRef()
-  const startTimeRef = useRef()
+  const lastFrameTimeRef = useRef()
 
-  const calculateTrajectory = () => {
+  // Constants
+  const DT = 0.016 // Time step (approx 60fps)
+  const SCALE = 5 // pixels per meter
+  const DRAG_COEFF = 0.05 // Arbitrary drag coefficient for visual effect
+
+  const runPreSimulation = () => {
     const v0 = velocity[0]
     const angleRad = (angle[0] * Math.PI) / 180
     const g = gravity[0]
+    const windSpeed = wind[0]
+    const hasDrag = airResistance
 
-    const flightTime = (2 * v0 * Math.sin(angleRad)) / g
-    const maxHeight = (v0 * v0 * Math.sin(angleRad) * Math.sin(angleRad)) / (2 * g)
-    const range = (v0 * v0 * Math.sin(2 * angleRad)) / g
+    let x = 0
+    let y = 0
+    let vx = v0 * Math.cos(angleRad)
+    let vy = v0 * Math.sin(angleRad)
+    let t = 0
+    let maxY = 0
 
-    return { flightTime, maxHeight, range }
+    // Run simulation until y < 0 or timeout
+    while (y >= 0 && t < 20) {
+      maxY = Math.max(maxY, y)
+      
+      // Forces
+      let ax = 0
+      let ay = -g
+
+      if (hasDrag) {
+        const v = Math.sqrt(vx * vx + vy * vy)
+        ax -= DRAG_COEFF * v * vx
+        ay -= DRAG_COEFF * v * vy
+      }
+
+      // Wind effect
+      ax += windSpeed * 0.5
+
+      vx += ax * DT
+      vy += ay * DT
+      x += vx * DT
+      y += vy * DT
+      t += DT
+    }
+
+    return {
+      maxHeight: maxY,
+      range: x,
+      flightTime: t
+    }
   }
 
-  const drawCanvas = (time = 0) => {
+  const drawCanvas = () => {
     const canvas = canvasRef.current
     if (!canvas) return
 
@@ -141,15 +192,6 @@ const ProjectileSimulation = () => {
       ctx.stroke()
     }
 
-    // Calculate current position
-    const v0 = velocity[0]
-    const angleRad = (angle[0] * Math.PI) / 180
-    const g = gravity[0]
-    const scale = 5 // pixels per meter
-
-    const x = v0 * Math.cos(angleRad) * time * scale
-    const y = height - 50 - (v0 * Math.sin(angleRad) * time - 0.5 * g * time * time) * scale
-
     // Draw trail
     if (trail.length > 1) {
       ctx.strokeStyle = "rgba(34, 197, 94, 0.6)"
@@ -162,11 +204,15 @@ const ProjectileSimulation = () => {
       ctx.stroke()
     }
 
-    // Draw projectile only if it's above ground
-    if (y <= height - 50 && x >= 0 && x <= width) {
+    // Draw projectile
+    const { x, y } = simStateRef.current
+    const canvasX = x * SCALE
+    const canvasY = height - 50 - y * SCALE
+
+    if (canvasY <= height - 50 && canvasX >= -100 && canvasX <= width + 100) {
       ctx.fillStyle = "#ef4444"
       ctx.beginPath()
-      ctx.arc(x + 50, y, 8, 0, 2 * Math.PI)
+      ctx.arc(canvasX + 50, canvasY, 8, 0, 2 * Math.PI)
       ctx.fill()
 
       // Add glow effect
@@ -174,9 +220,6 @@ const ProjectileSimulation = () => {
       ctx.shadowBlur = 20
       ctx.fill()
       ctx.shadowBlur = 0
-
-      setCurrentPos({ x: x / scale, y: Math.max(0, (height - 50 - y) / scale) })
-      setTrail((prev) => [...prev.slice(-50), { x: x + 50, y }])
     }
 
     // Draw ground
@@ -188,46 +231,104 @@ const ProjectileSimulation = () => {
     ctx.fillRect(40, height - 60, 20, 20)
 
     // Draw angle indicator
-    ctx.strokeStyle = "#3b82f6"
-    ctx.lineWidth = 3
-    const launchX = 50
-    const launchY = height - 50
-    const indicatorLength = 40
-    const indicatorX = launchX + Math.cos(angleRad) * indicatorLength
-    const indicatorY = launchY - Math.sin(angleRad) * indicatorLength
+    if (!isPlaying) {
+      const angleRad = (angle[0] * Math.PI) / 180
+      ctx.strokeStyle = "#3b82f6"
+      ctx.lineWidth = 3
+      const launchX = 50
+      const launchY = height - 50
+      const indicatorLength = 40
+      const indicatorX = launchX + Math.cos(angleRad) * indicatorLength
+      const indicatorY = launchY - Math.sin(angleRad) * indicatorLength
 
-    ctx.beginPath()
-    ctx.moveTo(launchX, launchY)
-    ctx.lineTo(indicatorX, indicatorY)
-    ctx.stroke()
+      ctx.beginPath()
+      ctx.moveTo(launchX, launchY)
+      ctx.lineTo(indicatorX, indicatorY)
+      ctx.stroke()
+    }
+  }
+
+  const updatePhysics = (dt) => {
+    const state = simStateRef.current
+    const g = gravity[0]
+    const windSpeed = wind[0]
+    
+    // Forces
+    let ax = 0
+    let ay = -g
+
+    if (airResistance) {
+      const v = Math.sqrt(state.vx * state.vx + state.vy * state.vy)
+      // Simple drag model: F = -k * v^2 (direction opposite to velocity)
+      // Here we use a simplified linear/quadratic mix for stability and visual effect
+      ax -= DRAG_COEFF * v * state.vx
+      ay -= DRAG_COEFF * v * state.vy
+    }
+
+    // Wind
+    ax += windSpeed * 0.5
+
+    // Update velocity
+    state.vx += ax * dt
+    state.vy += ay * dt
+
+    // Update position
+    state.x += state.vx * dt
+    state.y += state.vy * dt
+    state.t += dt
+
+    return state.y >= 0 // Return true if still in air
   }
 
   const animate = (timestamp) => {
-    if (!startTimeRef.current) startTimeRef.current = timestamp
-    const elapsed = (timestamp - startTimeRef.current) / 1000
+    if (!lastFrameTimeRef.current) lastFrameTimeRef.current = timestamp
+    const dt = (timestamp - lastFrameTimeRef.current) / 1000
+    lastFrameTimeRef.current = timestamp
 
-    const { flightTime } = calculateTrajectory()
+    // Limit dt to avoid huge jumps if tab is inactive
+    const safeDt = Math.min(dt, 0.1)
 
-    if (elapsed <= flightTime && isPlaying) {
-      drawCanvas(elapsed)
-      setStats((prev) => ({ ...prev, currentTime: elapsed }))
-      animationRef.current = requestAnimationFrame(animate)
-    } else {
-      setIsPlaying(false)
-      setStats((prev) => ({ ...prev, currentTime: flightTime }))
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current)
+    if (isPlaying) {
+      const stillFlying = updatePhysics(safeDt)
+      
+      const state = simStateRef.current
+      const canvasHeight = canvasRef.current?.height || 500
+      const canvasX = state.x * SCALE + 50
+      const canvasY = canvasHeight - 50 - state.y * SCALE
+
+      setCurrentPos({ x: state.x, y: Math.max(0, state.y) })
+      setStats(prev => ({ ...prev, currentTime: state.t }))
+      setTrail(prev => [...prev.slice(-100), { x: canvasX, y: canvasY }])
+
+      if (stillFlying) {
+        drawCanvas()
+        animationRef.current = requestAnimationFrame(animate)
+      } else {
+        setIsPlaying(false)
+        drawCanvas()
       }
+    } else {
+      drawCanvas()
     }
   }
 
   const startSimulation = () => {
     if (!isPlaying) {
-      const trajectory = calculateTrajectory()
-      setStats((prev) => ({ ...trajectory, currentTime: 0 }))
+      // Reset state for new launch
+      const v0 = velocity[0]
+      const angleRad = (angle[0] * Math.PI) / 180
+      
+      simStateRef.current = {
+        x: 0,
+        y: 0,
+        vx: v0 * Math.cos(angleRad),
+        vy: v0 * Math.sin(angleRad),
+        t: 0,
+        active: true
+      }
+      
       setTrail([])
-      setCurrentPos({ x: 0, y: 0 })
-      startTimeRef.current = null
+      lastFrameTimeRef.current = null
       setIsPlaying(true)
     } else {
       setIsPlaying(false)
@@ -238,51 +339,49 @@ const ProjectileSimulation = () => {
     setIsPlaying(false)
     setTrail([])
     setCurrentPos({ x: 0, y: 0 })
+    simStateRef.current = { x: 0, y: 0, vx: 0, vy: 0, t: 0, active: false }
     setStats({
       maxHeight: 0,
       range: 0,
       flightTime: 0,
       currentTime: 0,
     })
-    drawCanvas(0)
+    if (animationRef.current) cancelAnimationFrame(animationRef.current)
+    // Trigger a redraw
+    setTimeout(drawCanvas, 0)
   }
 
+  // Calculate predicted stats when parameters change
   useEffect(() => {
-    if (isPlaying && canvasRef.current) {
+    const predicted = runPreSimulation()
+    setStats(prev => ({
+      ...prev,
+      maxHeight: predicted.maxHeight,
+      range: predicted.range,
+      flightTime: predicted.flightTime
+    }))
+    drawCanvas()
+  }, [velocity, angle, gravity, airResistance, wind])
+
+  useEffect(() => {
+    if (isPlaying) {
       animationRef.current = requestAnimationFrame(animate)
-    } else if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current)
     }
-
     return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current)
-      }
+      if (animationRef.current) cancelAnimationFrame(animationRef.current)
     }
-  }, [isPlaying, velocity, angle, gravity])
-
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (canvas) {
-      drawCanvas(0)
-    }
-  }, [velocity, angle, gravity])
+  }, [isPlaying])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900 relative overflow-hidden">
       {/* Physics-themed floating background */}
       <div className="absolute inset-0">
-        {/* Floating Rockets */}
         {[...Array(8)].map((_, i) => (
           <FloatingRocket key={`rocket-${i}`} delay={i * 0.8} />
         ))}
-
-        {/* Floating Stars */}
         {[...Array(15)].map((_, i) => (
           <FloatingStar key={`star-${i}`} delay={i * 0.4} />
         ))}
-
-        {/* Floating Zaps */}
         {[...Array(10)].map((_, i) => (
           <FloatingZap key={`zap-${i}`} delay={i * 0.6} />
         ))}
@@ -314,7 +413,7 @@ const ProjectileSimulation = () => {
           <div className="lg:col-span-1 space-y-6">
             <Card className="bg-gray-900/50 border-white/10 backdrop-blur-xl">
               <CardHeader>
-                <CardTitle className="text-white flex items-center">
+              <CardTitle className="text-white flex items-center">
                   <Target className="w-5 h-5 mr-2 text-blue-400" />
                   Projectile Parameters
                 </CardTitle>
@@ -337,7 +436,26 @@ const ProjectileSimulation = () => {
                   <Slider value={gravity} onValueChange={setGravity} max={20} min={1} step={0.1} className="w-full" />
                 </div>
 
-                <div className="flex space-x-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Switch id="air-resistance" checked={airResistance} onCheckedChange={setAirResistance} />
+                    <Label htmlFor="air-resistance" className="text-white">Air Resistance</Label>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-white text-sm font-medium mb-2 flex items-center">
+                    <Wind className="w-4 h-4 mr-2" />
+                    Wind: {wind[0]} m/s
+                  </label>
+                  <Slider value={wind} onValueChange={setWind} max={20} min={-20} step={1} className="w-full" />
+                  <div className="flex justify-between text-xs text-gray-400 mt-1">
+                    <span>Headwind</span>
+                    <span>Tailwind</span>
+                  </div>
+                </div>
+
+                <div className="flex space-x-3 pt-4">
                   <Button
                     onClick={startSimulation}
                     className={`flex-1 ${

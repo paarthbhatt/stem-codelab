@@ -8,6 +8,9 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Calculator, ActivityIcon as Function, Grid3X3, Zap } from "lucide-react"
 import Link from "next/link"
+import { create, all } from 'mathjs'
+
+const math = create(all)
 
 const FloatingNumber = ({ delay = 0, number }) => (
   <motion.div
@@ -88,41 +91,19 @@ const FunctionPlotter = () => {
   const [xMax, setXMax] = useState(10)
   const [yMin, setYMin] = useState(-10)
   const [yMax, setYMax] = useState(10)
+  const [errorMessage, setErrorMessage] = useState("")
 
-  // Update the evaluateFunction to handle more math operations
   const evaluateFunction = (x, equation) => {
     try {
-      // Enhanced math expression evaluator
-      let expr = equation
-        .replace(/\^/g, "**")
-        .replace(/sin/g, "Math.sin")
-        .replace(/cos/g, "Math.cos")
-        .replace(/tan/g, "Math.tan")
-        .replace(/log/g, "Math.log")
-        .replace(/ln/g, "Math.log")
-        .replace(/sqrt/g, "Math.sqrt")
-        .replace(/abs/g, "Math.abs")
-        .replace(/pi/g, "Math.PI")
-        .replace(/e/g, "Math.E")
-        .replace(/exp/g, "Math.exp")
-        .replace(/floor/g, "Math.floor")
-        .replace(/ceil/g, "Math.ceil")
-        .replace(/round/g, "Math.round")
-        .replace(/x/g, `(${x})`)
-
-      // Handle special cases
-      if (expr.includes("Math.abs")) {
-        expr = expr.replace(/Math\.abs$$(.*?)$$/g, "Math.abs($1)")
-      }
-
-      const result = eval(expr)
-      return isFinite(result) ? result : Number.NaN
+      // Use mathjs for safer and more comprehensive evaluation
+      const scope = { x }
+      const result = math.evaluate(equation, scope)
+      return typeof result === 'number' && isFinite(result) ? result : NaN
     } catch (e) {
-      return Number.NaN
+      return NaN
     }
   }
 
-  // Update the drawGraph function to handle edge cases better
   const drawGraph = () => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -192,12 +173,14 @@ const FunctionPlotter = () => {
     ctx.beginPath()
 
     let firstPoint = true
+    let hasValidPoints = false
     const step = (xMax - xMin) / (width * 2) // Higher resolution
 
     for (let x = xMin; x <= xMax; x += step) {
       const y = evaluateFunction(x, equation)
 
       if (!isNaN(y) && isFinite(y)) {
+        hasValidPoints = true
         const canvasX = (x - xMin) * xScale
         const canvasY = height - (y - yMin) * yScale
 
@@ -217,13 +200,18 @@ const FunctionPlotter = () => {
       }
     }
 
-    ctx.stroke()
+    if (hasValidPoints) {
+      ctx.stroke()
 
-    // Add glow effect
-    ctx.shadowColor = "#22d3ee"
-    ctx.shadowBlur = 10
-    ctx.stroke()
-    ctx.shadowBlur = 0
+      // Add glow effect
+      ctx.shadowColor = "#22d3ee"
+      ctx.shadowBlur = 10
+      ctx.stroke()
+      ctx.shadowBlur = 0
+      setErrorMessage("")
+    } else {
+      setErrorMessage("Invalid function or no valid points in range")
+    }
 
     // Draw axis labels
     ctx.fillStyle = "white"
@@ -233,7 +221,6 @@ const FunctionPlotter = () => {
     // X-axis labels
     for (let x = Math.ceil(xMin / xStep) * xStep; x <= xMax; x += xStep) {
       if (Math.abs(x) > 0.001) {
-        // Avoid labeling zero
         const canvasX = (x - xMin) * xScale
         const labelY = yMin <= 0 && yMax >= 0 ? height - (0 - yMin) * yScale + 15 : height - 5
         ctx.fillText(x.toFixed(1), canvasX, labelY)
@@ -244,7 +231,6 @@ const FunctionPlotter = () => {
     ctx.textAlign = "left"
     for (let y = Math.ceil(yMin / yStep) * yStep; y <= yMax; y += yStep) {
       if (Math.abs(y) > 0.001) {
-        // Avoid labeling zero
         const canvasY = height - (y - yMin) * yScale
         const labelX = xMin <= 0 && xMax >= 0 ? (0 - xMin) * xScale + 5 : 5
         ctx.fillText(y.toFixed(1), labelX, canvasY - 5)
@@ -252,24 +238,28 @@ const FunctionPlotter = () => {
     }
   }
 
-  // Add a function to auto-scale the graph
   const autoScale = () => {
-    const step = (xMax - xMin) / 100
-    let minY = Number.POSITIVE_INFINITY
-    let maxY = Number.NEGATIVE_INFINITY
+    const step = (xMax - xMin) / 200
+    let minY = Infinity
+    let maxY = -Infinity
+    let validPoints = 0
 
     for (let x = xMin; x <= xMax; x += step) {
       const y = evaluateFunction(x, equation)
       if (!isNaN(y) && isFinite(y)) {
         minY = Math.min(minY, y)
         maxY = Math.max(maxY, y)
+        validPoints++
       }
     }
 
-    if (isFinite(minY) && isFinite(maxY)) {
-      const padding = (maxY - minY) * 0.1
-      setYMin(minY - padding)
-      setYMax(maxY + padding)
+    if (validPoints > 0 && isFinite(minY) && isFinite(maxY)) {
+      const padding = Math.max((maxY - minY) * 0.1, 1)
+      setYMin(Math.floor((minY - padding) * 10) / 10)
+      setYMax(Math.ceil((maxY + padding) * 10) / 10)
+      setErrorMessage("")
+    } else {
+      setErrorMessage("Cannot auto-scale: no valid points found")
     }
   }
 
@@ -282,10 +272,12 @@ const FunctionPlotter = () => {
     { name: "Cubic", equation: "x^3" },
     { name: "Sine Wave", equation: "sin(x)" },
     { name: "Cosine Wave", equation: "cos(x)" },
-    { name: "Exponential", equation: "e^x" },
-    { name: "Logarithm", equation: "log(x)" },
-    { name: "Square Root", equation: "sqrt(x)" },
-    { name: "Absolute Value", equation: "Math.abs(x)" },
+    { name: "Exponential", equation: "exp(x)" },
+    { name: "Logarithm", equation: "log(abs(x))" },
+    { name: "Square Root", equation: "sqrt(abs(x))" },
+    { name: "Absolute Value", equation: "abs(x)" },
+    { name: "Tangent", equation: "tan(x)" },
+    { name: "Reciprocal", equation: "1/x" },
   ]
 
   // Math-themed floating elements
@@ -297,17 +289,12 @@ const FunctionPlotter = () => {
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-green-900 to-teal-900 relative overflow-hidden">
       {/* Math-themed floating background */}
       <div className="absolute inset-0">
-        {/* Floating Numbers */}
         {[...Array(12)].map((_, i) => (
           <FloatingNumber key={`number-${i}`} delay={i * 0.5} number={numbers[i % numbers.length]} />
         ))}
-
-        {/* Floating Symbols */}
         {[...Array(15)].map((_, i) => (
           <FloatingSymbol key={`symbol-${i}`} delay={i * 0.3} symbol={symbols[i % symbols.length]} />
         ))}
-
-        {/* Floating Equations */}
         {[...Array(8)].map((_, i) => (
           <FloatingEquation key={`equation-${i}`} delay={i * 0.8} equation={equations[i % equations.length]} />
         ))}
@@ -350,9 +337,12 @@ const FunctionPlotter = () => {
                   <Input
                     value={equation}
                     onChange={(e) => setEquation(e.target.value)}
-                    className="bg-gray-800/50 border-white/20 text-white"
+                    className="bg-gray-800/50 border-white/20 text-white font-mono"
                     placeholder="Enter function (e.g., x^2, sin(x))"
                   />
+                  {errorMessage && (
+                    <p className="text-red-400 text-xs mt-2">{errorMessage}</p>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -393,8 +383,10 @@ const FunctionPlotter = () => {
                     />
                   </div>
                 </div>
-                {/* Add auto-scale button to the controls */}
-                <Button variant="secondary" onClick={autoScale}>
+                <Button
+                  onClick={autoScale}
+                  className="w-full bg-teal-500 hover:bg-teal-600 text-white"
+                >
                   Auto Scale
                 </Button>
               </CardContent>
@@ -436,7 +428,7 @@ const FunctionPlotter = () => {
               <CardContent className="space-y-3">
                 <div className="text-sm">
                   <div className="text-gray-400">Current Function:</div>
-                  <div className="text-cyan-300 font-mono">f(x) = {equation}</div>
+                  <div className="text-cyan-300 font-mono break-all">f(x) = {equation}</div>
                 </div>
                 <div className="text-sm">
                   <div className="text-gray-400">Domain:</div>
