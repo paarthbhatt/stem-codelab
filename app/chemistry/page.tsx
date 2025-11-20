@@ -403,7 +403,7 @@ const MolecularBuilder = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-orange-900 to-red-900 relative overflow-hidden">
       {/* Chemistry-themed floating background */}
-      <div className="absolute inset-0">
+      <div className="absolute inset-0" suppressHydrationWarning>
         {[...Array(10)].map((_, i) => (
           <FloatingAtom key={`atom-${i}`} delay={i * 0.6} />
         ))}
@@ -464,8 +464,8 @@ const MolecularBuilder = () => {
                       size="sm"
                       onClick={() => setSelectedElement(symbol)}
                       className={`h-12 ${selectedElement === symbol
-                          ? "bg-orange-500 hover:bg-orange-600"
-                          : "border-white/20 text-white hover:bg-white/10"
+                        ? "bg-orange-500 hover:bg-orange-600"
+                        : "border-white/20 text-white hover:bg-white/10"
                         }`}
                       style={{ backgroundColor: selectedElement === symbol ? element.color : undefined }}
                     >

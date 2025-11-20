@@ -142,7 +142,7 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900 relative overflow-hidden">
       {/* Enhanced Animated Background Elements */}
-      <div className="absolute inset-0">
+      <div className="absolute inset-0" suppressHydrationWarning>
         {/* Floating Particles */}
         {[...Array(40)].map((_, i) => (
           <FloatingParticle key={`particle-${i}`} delay={i * 0.1} size={i % 3 === 0 ? "w-3 h-3" : "w-2 h-2"} />

@@ -274,7 +274,7 @@ const DNAAnalyzer = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-emerald-900 to-cyan-900 relative overflow-hidden">
       {/* Biology-themed floating background */}
-      <div className="absolute inset-0">
+      <div className="absolute inset-0" suppressHydrationWarning>
         {[...Array(8)].map((_, i) => (
           <FloatingDNA key={`dna-${i}`} delay={i * 0.7} />
         ))}
@@ -400,12 +400,12 @@ const DNAAnalyzer = () => {
                         <div key={nucleotide} className="text-center">
                           <div
                             className={`w-16 h-16 mx-auto rounded-full flex items-center justify-center text-white font-bold text-xl mb-2 ${nucleotide === "A"
-                                ? "bg-red-500"
-                                : nucleotide === "T"
-                                  ? "bg-blue-500"
-                                  : nucleotide === "C"
-                                    ? "bg-green-500"
-                                    : "bg-yellow-500"
+                              ? "bg-red-500"
+                              : nucleotide === "T"
+                                ? "bg-blue-500"
+                                : nucleotide === "C"
+                                  ? "bg-green-500"
+                                  : "bg-yellow-500"
                               }`}
                           >
                             {nucleotide}

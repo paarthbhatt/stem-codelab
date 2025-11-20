@@ -1,11 +1,12 @@
 "use client"
 
-import { useState } from "react"
-import { motion } from "framer-motion"
+import { useState, useEffect } from "react"
+import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { Progress } from "@/components/ui/progress"
 import {
   ArrowLeft,
   Brain,
@@ -20,36 +21,56 @@ import {
   BookOpen,
   Play,
   ChevronRight,
+  ChevronDown,
   Atom,
   Microscope,
   Globe,
   Cpu,
+  CheckCircle2,
+  Lock,
+  Clock,
+  Award,
+  TrendingUp,
 } from "lucide-react"
 import Link from "next/link"
 
-const FloatingIcon = ({ delay = 0, icon: Icon, color = "text-cyan-400" }) => (
-  <motion.div
-    className={`absolute ${color} opacity-20`}
-    animate={{
-      y: [-20, -120],
-      x: [0, Math.random() * 60 - 30],
-      rotate: [0, 360],
-      opacity: [0.2, 0],
-    }}
-    transition={{
-      duration: 4,
-      repeat: Number.POSITIVE_INFINITY,
-      delay,
-      ease: "easeOut",
-    }}
-    style={{
-      left: `${Math.random() * 100}%`,
-      top: `${Math.random() * 100}%`,
-    }}
-  >
-    <Icon className="w-6 h-6" />
-  </motion.div>
-)
+const FloatingIcon = ({ delay = 0, icon: Icon, color = "text-cyan-400" }) => {
+  const [position, setPosition] = useState({ left: 0, top: 0 })
+  const [xOffset, setXOffset] = useState(0)
+
+  useEffect(() => {
+    // Generate random positions only on client side to avoid hydration mismatch
+    setPosition({
+      left: Math.random() * 100,
+      top: Math.random() * 100,
+    })
+    setXOffset(Math.random() * 60 - 30)
+  }, [])
+
+  return (
+    <motion.div
+      className={`absolute ${color} opacity-20`}
+      animate={{
+        y: [-20, -120],
+        x: [0, xOffset],
+        rotate: [0, 360],
+        opacity: [0.2, 0],
+      }}
+      transition={{
+        duration: 4,
+        repeat: Number.POSITIVE_INFINITY,
+        delay,
+        ease: "easeOut",
+      }}
+      style={{
+        left: `${position.left}%`,
+        top: `${position.top}%`,
+      }}
+    >
+      <Icon className="w-6 h-6" />
+    </motion.div>
+  )
+}
 
 const ConceptCard = ({ icon: Icon, title, description, applications, difficulty, estimatedTime, moduleLink }) => (
   <motion.div whileHover={{ scale: 1.02, y: -5 }} className="group">
@@ -109,35 +130,196 @@ const ConceptCard = ({ icon: Icon, title, description, applications, difficulty,
   </motion.div>
 )
 
-const LearningPath = ({ title, concepts, color }) => (
-  <Card className="bg-gray-900/50 border-white/10 backdrop-blur-xl">
-    <CardHeader>
-      <CardTitle className="text-white flex items-center">
-        <div className={`w-3 h-3 rounded-full ${color} mr-3`} />
-        {title}
-      </CardTitle>
-    </CardHeader>
-    <CardContent>
-      <div className="space-y-3">
-        {concepts.map((concept, index) => (
-          <div
-            key={index}
-            className="flex items-center space-x-3 p-3 bg-gray-800/30 rounded-lg hover:bg-gray-700/30 transition-colors"
-          >
-            <div className="w-8 h-8 rounded-full bg-gradient-to-r from-gray-600 to-gray-500 flex items-center justify-center text-white text-sm font-bold">
-              {index + 1}
-            </div>
+const LearningPath = ({ title, color, concepts, description, totalDuration, skillLevel, prerequisites }) => {
+  const [isExpanded, setIsExpanded] = useState(false)
+  const [completedLessons, setCompletedLessons] = useState([])
+
+  const toggleLesson = (index) => {
+    setCompletedLessons((prev) =>
+      prev.includes(index) ? prev.filter((i) => i !== index) : [...prev, index]
+    )
+  }
+
+  const progress = (completedLessons.length / concepts.length) * 100
+
+  return (
+    <Card className="bg-gray-900/50 border-white/10 backdrop-blur-xl hover:border-cyan-500/20 transition-all">
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3 flex-1">
+            <div className={`w-3 h-3 rounded-full ${color}`} />
             <div className="flex-1">
-              <div className="text-white font-medium text-sm">{concept.name}</div>
-              <div className="text-gray-400 text-xs">{concept.description}</div>
+              <CardTitle className="text-white text-lg">{title}</CardTitle>
+              <p className="text-gray-400 text-xs mt-1">{description}</p>
             </div>
-            <ChevronRight className="w-4 h-4 text-gray-400" />
           </div>
-        ))}
-      </div>
-    </CardContent>
-  </Card>
-)
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="text-white hover:bg-white/10"
+          >
+            {isExpanded ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
+          </Button>
+        </div>
+
+        {/* Progress Bar */}
+        <div className="mt-4 space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-gray-400">Progress</span>
+            <span className="text-cyan-400 font-medium">{Math.round(progress)}%</span>
+          </div>
+          <Progress value={progress} className="h-2" />
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-3 gap-3 mt-4">
+          <div className="flex items-center space-x-2 text-xs">
+            <Clock className="w-4 h-4 text-blue-400" />
+            <span className="text-gray-300">{totalDuration}</span>
+          </div>
+          <div className="flex items-center space-x-2 text-xs">
+            <TrendingUp className="w-4 h-4 text-green-400" />
+            <span className="text-gray-300">{skillLevel}</span>
+          </div>
+          <div className="flex items-center space-x-2 text-xs">
+            <Award className="w-4 h-4 text-yellow-400" />
+            <span className="text-gray-300">{completedLessons.length}/{concepts.length}</span>
+          </div>
+        </div>
+      </CardHeader>
+
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <CardContent className="pt-0">
+              {/* Prerequisites */}
+              {prerequisites && prerequisites.length > 0 && (
+                <div className="mb-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <Lightbulb className="w-4 h-4 text-yellow-400" />
+                    <span className="text-yellow-300 text-sm font-medium">Prerequisites</span>
+                  </div>
+                  <ul className="space-y-1">
+                    {prerequisites.map((prereq, index) => (
+                      <li key={index} className="text-yellow-200 text-xs flex items-center">
+                        <div className="w-1 h-1 bg-yellow-400 rounded-full mr-2" />
+                        {prereq}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Lessons */}
+              <div className="space-y-3">
+                {concepts.map((concept, index) => {
+                  const isCompleted = completedLessons.includes(index)
+                  const isLocked = index > 0 && !completedLessons.includes(index - 1)
+
+                  return (
+                    <motion.div
+                      key={index}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.1 }}
+                      className={`flex items-center space-x-3 p-3 rounded-lg transition-all ${isCompleted
+                        ? "bg-green-500/10 border border-green-500/20"
+                        : isLocked
+                          ? "bg-gray-800/20 border border-gray-700/30 opacity-60"
+                          : "bg-gray-800/30 border border-white/10 hover:bg-gray-700/30"
+                        }`}
+                    >
+                      <div
+                        className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${isCompleted
+                          ? "bg-green-500 text-white"
+                          : isLocked
+                            ? "bg-gray-600 text-gray-400"
+                            : "bg-gradient-to-r from-gray-600 to-gray-500 text-white"
+                          }`}
+                      >
+                        {isCompleted ? <CheckCircle2 className="w-5 h-5" /> : isLocked ? <Lock className="w-4 h-4" /> : index + 1}
+                      </div>
+                      <div className="flex-1">
+                        <div className={`font-medium text-sm ${isCompleted ? "text-green-300" : "text-white"}`}>
+                          {concept.name}
+                        </div>
+                        <div className="text-gray-400 text-xs">{concept.description}</div>
+                        {concept.duration && (
+                          <div className="flex items-center space-x-1 mt-1">
+                            <Clock className="w-3 h-3 text-gray-500" />
+                            <span className="text-gray-500 text-xs">{concept.duration}</span>
+                          </div>
+                        )}
+                      </div>
+                      {!isLocked && (
+                        <div className="flex items-center space-x-2">
+                          {concept.moduleLink && (
+                            <Link href={concept.moduleLink}>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 px-3 text-cyan-400 hover:bg-cyan-500/10"
+                              >
+                                <Play className="w-3 h-3 mr-1" />
+                                Start
+                              </Button>
+                            </Link>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => toggleLesson(index)}
+                            className={`h-8 w-8 p-0 ${isCompleted ? "text-green-400 hover:bg-green-500/10" : "text-gray-400 hover:bg-white/10"
+                              }`}
+                          >
+                            <CheckCircle2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      )}
+                    </motion.div>
+                  )
+                })}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="mt-4 flex space-x-2">
+                <Button
+                  className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white"
+                  disabled={progress === 100}
+                >
+                  {progress === 100 ? (
+                    <>
+                      <Award className="w-4 h-4 mr-2" />
+                      Completed!
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-4 h-4 mr-2" />
+                      Continue Learning
+                    </>
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="border-white/20 text-white hover:bg-white/10"
+                  onClick={() => setCompletedLessons([])}
+                >
+                  Reset
+                </Button>
+              </div>
+            </CardContent>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </Card>
+  )
+}
 
 export default function ConceptsPage() {
   const [activeTab, setActiveTab] = useState("overview")
@@ -329,31 +511,103 @@ export default function ConceptsPage() {
     {
       title: "Beginner's Journey",
       color: "bg-green-500",
+      description: "Perfect for those starting their STEM adventure",
+      totalDuration: "6-8 hours",
+      skillLevel: "Beginner",
+      prerequisites: ["Basic arithmetic", "Reading comprehension"],
       concepts: [
-        { name: "Basic Physics Concepts", description: "Start with fundamental forces and motion" },
-        { name: "Mathematical Foundations", description: "Essential algebra and geometry" },
-        { name: "Introduction to Chemistry", description: "Atoms, molecules, and basic reactions" },
-        { name: "Biology Basics", description: "Cell structure and basic life processes" },
+        {
+          name: "Basic Physics Concepts",
+          description: "Start with fundamental forces and motion",
+          duration: "1.5 hours",
+          moduleLink: "/physics"
+        },
+        {
+          name: "Mathematical Foundations",
+          description: "Essential algebra and geometry",
+          duration: "2 hours",
+          moduleLink: "/math"
+        },
+        {
+          name: "Introduction to Chemistry",
+          description: "Atoms, molecules, and basic reactions",
+          duration: "1.5 hours",
+          moduleLink: "/chemistry"
+        },
+        {
+          name: "Biology Basics",
+          description: "Cell structure and basic life processes",
+          duration: "1.5 hours",
+          moduleLink: "/biology"
+        },
       ],
     },
     {
       title: "Intermediate Explorer",
       color: "bg-blue-500",
+      description: "Build on fundamentals with advanced topics",
+      totalDuration: "10-12 hours",
+      skillLevel: "Intermediate",
+      prerequisites: ["Completed Beginner's Journey", "Basic calculus knowledge", "Understanding of scientific method"],
       concepts: [
-        { name: "Advanced Physics", description: "Waves, thermodynamics, and electromagnetism" },
-        { name: "Calculus Applications", description: "Derivatives and integrals in real problems" },
-        { name: "Organic Chemistry", description: "Carbon compounds and reaction mechanisms" },
-        { name: "Molecular Biology", description: "DNA, RNA, and protein synthesis" },
+        {
+          name: "Advanced Physics",
+          description: "Waves, thermodynamics, and electromagnetism",
+          duration: "3 hours",
+          moduleLink: "/physics"
+        },
+        {
+          name: "Calculus Applications",
+          description: "Derivatives and integrals in real problems",
+          duration: "3 hours",
+          moduleLink: "/math"
+        },
+        {
+          name: "Organic Chemistry",
+          description: "Carbon compounds and reaction mechanisms",
+          duration: "2.5 hours",
+          moduleLink: "/chemistry"
+        },
+        {
+          name: "Molecular Biology",
+          description: "DNA, RNA, and protein synthesis",
+          duration: "2.5 hours",
+          moduleLink: "/biology"
+        },
       ],
     },
     {
       title: "Expert Pathway",
       color: "bg-purple-500",
+      description: "Master advanced concepts and research topics",
+      totalDuration: "15-20 hours",
+      skillLevel: "Advanced",
+      prerequisites: ["Completed Intermediate Explorer", "Strong mathematical background", "Research experience recommended"],
       concepts: [
-        { name: "Quantum Physics", description: "Subatomic particles and quantum mechanics" },
-        { name: "Advanced Mathematics", description: "Differential equations and complex analysis" },
-        { name: "Biochemistry", description: "Chemical processes in living organisms" },
-        { name: "Computational Biology", description: "Bioinformatics and systems biology" },
+        {
+          name: "Quantum Physics",
+          description: "Subatomic particles and quantum mechanics",
+          duration: "5 hours",
+          moduleLink: "/physics"
+        },
+        {
+          name: "Advanced Mathematics",
+          description: "Differential equations and complex analysis",
+          duration: "5 hours",
+          moduleLink: "/math"
+        },
+        {
+          name: "Biochemistry",
+          description: "Chemical processes in living organisms",
+          duration: "4 hours",
+          moduleLink: "/chemistry"
+        },
+        {
+          name: "Computational Biology",
+          description: "Bioinformatics and systems biology",
+          duration: "4 hours",
+          moduleLink: "/biology"
+        },
       ],
     },
   ]
@@ -361,7 +615,7 @@ export default function ConceptsPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900 relative overflow-hidden">
       {/* Floating Background */}
-      <div className="absolute inset-0">
+      <div className="absolute inset-0" suppressHydrationWarning>
         {[...Array(25)].map((_, i) => {
           const icons = [Brain, Lightbulb, Target, Atom, Microscope, Code]
           const colors = ["text-cyan-400", "text-blue-400", "text-purple-400", "text-pink-400", "text-green-400"]
@@ -450,12 +704,12 @@ export default function ConceptsPage() {
               <div className="lg:col-span-2 space-y-6">
                 <Card className="bg-gray-900/50 border-white/10 backdrop-blur-xl">
                   <CardHeader>
-                    <CardTitle className="text-white text-2xl">Learning Pathways</CardTitle>
+                    <CardTitle className="text-white text-2xl">Interactive Learning Pathways</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <p className="text-gray-300 mb-6">
                       Choose your learning journey based on your current knowledge level. Each pathway is designed to
-                      build upon previous concepts and provide a structured approach to mastering STEM subjects.
+                      build upon previous concepts and provide a structured approach to mastering STEM subjects. Track your progress, unlock achievements, and learn at your own pace.
                     </p>
                     <div className="space-y-4">
                       {learningPaths.map((path, index) => (

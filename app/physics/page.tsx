@@ -135,7 +135,7 @@ const ProjectileSimulation = () => {
     // Run simulation until y < 0 or timeout
     while (y >= 0 && t < 20) {
       maxY = Math.max(maxY, y)
-      
+
       // Forces
       let ax = 0
       let ay = -g
@@ -252,7 +252,7 @@ const ProjectileSimulation = () => {
     const state = simStateRef.current
     const g = gravity[0]
     const windSpeed = wind[0]
-    
+
     // Forces
     let ax = 0
     let ay = -g
@@ -290,7 +290,7 @@ const ProjectileSimulation = () => {
 
     if (isPlaying) {
       const stillFlying = updatePhysics(safeDt)
-      
+
       const state = simStateRef.current
       const canvasHeight = canvasRef.current?.height || 500
       const canvasX = state.x * SCALE + 50
@@ -317,7 +317,7 @@ const ProjectileSimulation = () => {
       // Reset state for new launch
       const v0 = velocity[0]
       const angleRad = (angle[0] * Math.PI) / 180
-      
+
       simStateRef.current = {
         x: 0,
         y: 0,
@@ -326,7 +326,7 @@ const ProjectileSimulation = () => {
         t: 0,
         active: true
       }
-      
+
       setTrail([])
       lastFrameTimeRef.current = null
       setIsPlaying(true)
@@ -375,7 +375,7 @@ const ProjectileSimulation = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900 relative overflow-hidden">
       {/* Physics-themed floating background */}
-      <div className="absolute inset-0">
+      <div className="absolute inset-0" suppressHydrationWarning>
         {[...Array(8)].map((_, i) => (
           <FloatingRocket key={`rocket-${i}`} delay={i * 0.8} />
         ))}
@@ -413,7 +413,7 @@ const ProjectileSimulation = () => {
           <div className="lg:col-span-1 space-y-6">
             <Card className="bg-gray-900/50 border-white/10 backdrop-blur-xl">
               <CardHeader>
-              <CardTitle className="text-white flex items-center">
+                <CardTitle className="text-white flex items-center">
                   <Target className="w-5 h-5 mr-2 text-blue-400" />
                   Projectile Parameters
                 </CardTitle>
@@ -458,9 +458,8 @@ const ProjectileSimulation = () => {
                 <div className="flex space-x-3 pt-4">
                   <Button
                     onClick={startSimulation}
-                    className={`flex-1 ${
-                      isPlaying ? "bg-red-500 hover:bg-red-600" : "bg-green-500 hover:bg-green-600"
-                    } text-white`}
+                    className={`flex-1 ${isPlaying ? "bg-red-500 hover:bg-red-600" : "bg-green-500 hover:bg-green-600"
+                      } text-white`}
                   >
                     {isPlaying ? <Pause className="w-4 h-4 mr-2" /> : <Play className="w-4 h-4 mr-2" />}
                     {isPlaying ? "Pause" : "Launch"}

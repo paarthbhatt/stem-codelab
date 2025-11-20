@@ -288,7 +288,7 @@ const FunctionPlotter = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-green-900 to-teal-900 relative overflow-hidden">
       {/* Math-themed floating background */}
-      <div className="absolute inset-0">
+      <div className="absolute inset-0" suppressHydrationWarning>
         {[...Array(12)].map((_, i) => (
           <FloatingNumber key={`number-${i}`} delay={i * 0.5} number={numbers[i % numbers.length]} />
         ))}
